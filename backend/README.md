@@ -22,3 +22,13 @@ curl http://127.0.0.1:8000/health
 The backend loads settings from environment variables and supports a `.env` file for development.
 
 Copy `.env.example` to `.env` and adjust values as needed.
+
+### Database configuration
+
+The backend uses SQLAlchemy for database access.
+
+- `DATABASE_URL` configures the SQLAlchemy connection URL.
+- Default value is `sqlite:///:memory:` for local development.
+- The SQLAlchemy engine is created in `backend/main.py`.
+- `SessionLocal` is the session factory.
+- `get_db` is a FastAPI dependency that yields a session and closes it after the request.
