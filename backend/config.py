@@ -12,6 +12,7 @@ class Settings:
     app_name: str = os.getenv("APP_NAME", "Mini Business Inventory Backend")
     environment: str = os.getenv("APP_ENV", "development")
     debug: bool = os.getenv("DEBUG", "true").strip().lower() in {"1", "true", "yes", "on"}
+    database_url: str = os.getenv("DATABASE_URL", "sqlite:///:memory:")
 
 
 settings = Settings()
