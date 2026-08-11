@@ -29,6 +29,5 @@ The backend uses SQLAlchemy for database access.
 
 - `DATABASE_URL` configures the SQLAlchemy connection URL.
 - Default value is `sqlite:///:memory:` for local development.
-- The SQLAlchemy engine is created in `backend/main.py`.
-- `SessionLocal` is the session factory.
+- The SQLAlchemy engine, declarative `Base`, and `SessionLocal` are defined in `backend/database.py`.
 - `get_db` is a FastAPI dependency that yields a session and closes it after the request.
