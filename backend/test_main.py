@@ -196,3 +196,57 @@ class CreateProductEndpointTestCase(unittest.TestCase):
             self.assertEqual(persisted.sku, "DB-001")
         finally:
             db.close()
+
+
+class RetrieveProductEndpointTestCase(unittest.TestCase):
+    def setUp(self):
+        self.engine = create_engine(
+            "sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(bind=self.engine)
+        self.TestingSessionLocal = sessionmaker(
+            autocommit=False, autoflush=False, bind=self.engine
+        )
+
+        def override_get_db():
+            db = self.TestingSessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        app.dependency_overrides[get_db] = override_get_db
+        self.client = TestClient(app)
+
+    def tearDown(self):
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=self.engine)
+        self.engine.dispose()
+
+    def test_get_product_success(self):
+        db = self.TestingSessionLocal()
+        try:
+            product = Product(name="Inventory Item", sku="ITEM-100")
+            created = create_product(db, product)
+            product_id = created.id
+        finally:
+            db.close()
+
+        response = self.client.get(f"/products/{product_id}")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["id"], product_id)
+        self.assertEqual(data["name"], "Inventory Item")
+        self.assertEqual(data["sku"], "ITEM-100")
+        self.assertIn("created_at", data)
+
+    def test_get_product_not_found(self):
+        response = self.client.get("/products/99999")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json(), {"detail": "Product not found"})
+
+    def test_get_product_invalid_id_type(self):
+        response = self.client.get("/products/abc")
+        self.assertEqual(response.status_code, 422)

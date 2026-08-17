@@ -27,6 +27,12 @@ curl -X POST http://127.0.0.1:8000/products \
   -d '{"name": "Test Product", "sku": "TEST-001"}'
 ```
 
+### Retrieve product
+
+```bash
+curl http://127.0.0.1:8000/products/1
+```
+
 ## Configuration
 
 The backend loads settings from environment variables and supports a `.env` file for development.
