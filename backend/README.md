@@ -54,3 +54,10 @@ From the `backend/` directory:
   ```bash
   alembic revision --autogenerate -m "describe change"
   ```
+
+### Data access
+
+The backend isolates database operations using repository functions in `backend/repository.py`:
+
+- `create_product(db, product)`: Persists and refreshes a `Product` entity.
+- `get_product_by_id(db, product_id)`: Retrieves a `Product` by its primary key ID.
