@@ -11,10 +11,20 @@ python -m pip install -r requirements.txt
 python -m uvicorn main:app --reload --port 8000
 ```
 
-## Health check
+## API Endpoints
+
+### Health check
 
 ```bash
 curl http://127.0.0.1:8000/health
+```
+
+### Create product
+
+```bash
+curl -X POST http://127.0.0.1:8000/products \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Test Product", "sku": "TEST-001"}'
 ```
 
 ## Configuration

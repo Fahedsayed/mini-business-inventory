@@ -13,6 +13,7 @@ from database import Base, SessionLocal, engine, get_db
 from main import app
 from models import Product
 from repository import create_product, get_product_by_id
+from schemas import HealthResponse, ProductCreate, ProductResponse
 
 
 client = TestClient(app)
@@ -124,3 +125,74 @@ class ProductRepositoryTestCase(unittest.TestCase):
         self.assertIsNotNone(fetched2)
         self.assertEqual(fetched1.name, "Item One")
         self.assertEqual(fetched2.name, "Item Two")
+
+
+class CreateProductEndpointTestCase(unittest.TestCase):
+    def setUp(self):
+        self.engine = create_engine(
+            "sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(bind=self.engine)
+        self.TestingSessionLocal = sessionmaker(
+            autocommit=False, autoflush=False, bind=self.engine
+        )
+
+        def override_get_db():
+            db = self.TestingSessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        app.dependency_overrides[get_db] = override_get_db
+        self.client = TestClient(app)
+
+    def tearDown(self):
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=self.engine)
+        self.engine.dispose()
+
+    def test_create_product_success(self):
+        payload = {"name": "Test Product", "sku": "TEST-001"}
+        response = self.client.post("/products", json=payload)
+
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertIn("id", data)
+        self.assertIsInstance(data["id"], int)
+        self.assertEqual(data["name"], "Test Product")
+        self.assertEqual(data["sku"], "TEST-001")
+        self.assertIn("created_at", data)
+
+    def test_create_product_missing_sku(self):
+        payload = {"name": "Incomplete Product"}
+        response = self.client.post("/products", json=payload)
+
+        self.assertEqual(response.status_code, 422)
+
+    def test_create_product_missing_name(self):
+        payload = {"sku": "NO-NAME-001"}
+        response = self.client.post("/products", json=payload)
+
+        self.assertEqual(response.status_code, 422)
+
+    def test_create_product_empty_payload(self):
+        response = self.client.post("/products", json={})
+        self.assertEqual(response.status_code, 422)
+
+    def test_create_product_persisted_in_database(self):
+        payload = {"name": "Database Persisted", "sku": "DB-001"}
+        response = self.client.post("/products", json=payload)
+        self.assertEqual(response.status_code, 201)
+        product_id = response.json()["id"]
+
+        db = self.TestingSessionLocal()
+        try:
+            persisted = get_product_by_id(db, product_id)
+            self.assertIsNotNone(persisted)
+            self.assertEqual(persisted.name, "Database Persisted")
+            self.assertEqual(persisted.sku, "DB-001")
+        finally:
+            db.close()
