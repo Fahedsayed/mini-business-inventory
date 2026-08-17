@@ -31,3 +31,26 @@ The backend uses SQLAlchemy for database access.
 - Default value is `sqlite:///:memory:` for local development.
 - The SQLAlchemy engine, declarative `Base`, and `SessionLocal` are defined in `backend/database.py`.
 - `get_db` is a FastAPI dependency that yields a session and closes it after the request.
+
+### Database migrations
+
+The backend uses **Alembic** to manage database schema migrations.
+
+From the `backend/` directory:
+
+- Apply all migrations:
+  ```bash
+  alembic upgrade head
+  ```
+- Revert the last applied migration:
+  ```bash
+  alembic downgrade -1
+  ```
+- View current migration revision:
+  ```bash
+  alembic current
+  ```
+- Generate a new migration based on SQLAlchemy model changes:
+  ```bash
+  alembic revision --autogenerate -m "describe change"
+  ```
