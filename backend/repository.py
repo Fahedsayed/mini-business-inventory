@@ -1,5 +1,6 @@
 from typing import Optional
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from models import Product
@@ -32,3 +33,16 @@ def get_product_by_id(db: Session, product_id: int) -> Optional[Product]:
         The Product instance if found, or None if not found.
     """
     return db.get(Product, product_id)
+
+
+def list_products(db: Session) -> list[Product]:
+    """Retrieve all Products ordered deterministically by ID ascending.
+
+    Args:
+        db: Active SQLAlchemy database session.
+
+    Returns:
+        List of Product instances.
+    """
+    stmt = select(Product).order_by(Product.id.asc())
+    return list(db.scalars(stmt).all())

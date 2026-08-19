@@ -33,6 +33,12 @@ curl -X POST http://127.0.0.1:8000/products \
 curl http://127.0.0.1:8000/products/1
 ```
 
+### List products
+
+```bash
+curl http://127.0.0.1:8000/products
+```
+
 ## Configuration
 
 The backend loads settings from environment variables and supports a `.env` file for development.
@@ -77,3 +83,4 @@ The backend isolates database operations using repository functions in `backend/
 
 - `create_product(db, product)`: Persists and refreshes a `Product` entity.
 - `get_product_by_id(db, product_id)`: Retrieves a `Product` by its primary key ID.
+- `list_products(db)`: Retrieves all `Product` entities ordered deterministically by ID.
