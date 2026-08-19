@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 from config import settings
 from database import get_db
 from models import Product
-from repository import create_product, get_product_by_id, list_products
-from schemas import HealthResponse, ProductCreate, ProductResponse
+from repository import create_product, get_product_by_id, list_products, update_product
+from schemas import HealthResponse, ProductCreate, ProductResponse, ProductUpdate
 
 app = FastAPI(title=settings.app_name)
 
@@ -51,6 +51,25 @@ def get_product(
 ):
     """Retrieve a product by its ID."""
     product = get_product_by_id(db, product_id)
+    if product is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product not found",
+        )
+    return product
+
+
+@app.put(
+    "/products/{product_id}",
+    response_model=ProductResponse,
+)
+def update_existing_product(
+    product_id: int,
+    product_in: ProductUpdate,
+    db: Session = Depends(get_db),
+):
+    """Update an existing product by its ID."""
+    product = update_product(db, product_id, name=product_in.name, sku=product_in.sku)
     if product is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

@@ -13,6 +13,11 @@ class ProductCreate(BaseModel):
     sku: str = Field(..., min_length=1, max_length=100)
 
 
+class ProductUpdate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    sku: str = Field(..., min_length=1, max_length=100)
+
+
 class ProductResponse(BaseModel):
     id: int
     name: str
