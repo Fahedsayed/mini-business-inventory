@@ -1,10 +1,10 @@
-from fastapi import Depends, FastAPI, status
+from fastapi import Depends, FastAPI, HTTPException, status
 from sqlalchemy.orm import Session
 
 from config import settings
 from database import get_db
 from models import Product
-from repository import create_product
+from repository import create_product, get_product_by_id
 from schemas import HealthResponse, ProductCreate, ProductResponse
 
 app = FastAPI(title=settings.app_name)
@@ -28,3 +28,21 @@ def create_new_product(
     """Create a new product."""
     product = Product(name=product_in.name, sku=product_in.sku)
     return create_product(db, product)
+
+
+@app.get(
+    "/products/{product_id}",
+    response_model=ProductResponse,
+)
+def get_product(
+    product_id: int,
+    db: Session = Depends(get_db),
+):
+    """Retrieve a product by its ID."""
+    product = get_product_by_id(db, product_id)
+    if product is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product not found",
+        )
+    return product
