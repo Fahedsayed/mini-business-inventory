@@ -12,8 +12,8 @@ sys.path.append(str(Path(__file__).resolve().parent))
 from database import Base, SessionLocal, engine, get_db
 from main import app
 from models import Product
-from repository import create_product, get_product_by_id, list_products
-from schemas import HealthResponse, ProductCreate, ProductResponse
+from repository import create_product, get_product_by_id, list_products, update_product
+from schemas import HealthResponse, ProductCreate, ProductResponse, ProductUpdate
 
 
 client = TestClient(app)
@@ -336,3 +336,85 @@ class ListProductsEndpointTestCase(unittest.TestCase):
         self.assertEqual(data[2]["name"], "Widget Gamma")
         self.assertEqual(data[2]["sku"], "WID-003")
         self.assertIn("created_at", data[2])
+
+
+class UpdateProductEndpointTestCase(unittest.TestCase):
+    def setUp(self):
+        self.engine = create_engine(
+            "sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(bind=self.engine)
+        self.TestingSessionLocal = sessionmaker(
+            autocommit=False, autoflush=False, bind=self.engine
+        )
+
+        def override_get_db():
+            db = self.TestingSessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        app.dependency_overrides[get_db] = override_get_db
+        self.client = TestClient(app)
+
+    def tearDown(self):
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=self.engine)
+        self.engine.dispose()
+
+    def test_update_product_success(self):
+        db = self.TestingSessionLocal()
+        try:
+            product = create_product(db, Product(name="Original Name", sku="ORIG-001"))
+            product_id = product.id
+        finally:
+            db.close()
+
+        payload = {"name": "Updated Name", "sku": "UPD-001"}
+        response = self.client.put(f"/products/{product_id}", json=payload)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["id"], product_id)
+        self.assertEqual(data["name"], "Updated Name")
+        self.assertEqual(data["sku"], "UPD-001")
+        self.assertIn("created_at", data)
+
+    def test_update_product_persisted(self):
+        db = self.TestingSessionLocal()
+        try:
+            product = create_product(db, Product(name="Before Update", sku="BEF-001"))
+            product_id = product.id
+        finally:
+            db.close()
+
+        payload = {"name": "After Update", "sku": "AFT-001"}
+        self.client.put(f"/products/{product_id}", json=payload)
+
+        db = self.TestingSessionLocal()
+        try:
+            fetched = get_product_by_id(db, product_id)
+            self.assertIsNotNone(fetched)
+            self.assertEqual(fetched.name, "After Update")
+            self.assertEqual(fetched.sku, "AFT-001")
+        finally:
+            db.close()
+
+    def test_update_product_not_found(self):
+        response = self.client.put("/products/99999", json={"name": "X", "sku": "Y"})
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json(), {"detail": "Product not found"})
+
+    def test_update_product_missing_name(self):
+        response = self.client.put("/products/1", json={"sku": "SKU-ONLY"})
+        self.assertEqual(response.status_code, 422)
+
+    def test_update_product_missing_sku(self):
+        response = self.client.put("/products/1", json={"name": "Name Only"})
+        self.assertEqual(response.status_code, 422)
+
+    def test_update_product_empty_payload(self):
+        response = self.client.put("/products/1", json={})
+        self.assertEqual(response.status_code, 422)

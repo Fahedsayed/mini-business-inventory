@@ -46,3 +46,25 @@ def list_products(db: Session) -> list[Product]:
     """
     stmt = select(Product).order_by(Product.id.asc())
     return list(db.scalars(stmt).all())
+
+
+def update_product(db: Session, product_id: int, name: str, sku: str) -> Optional[Product]:
+    """Update an existing Product's fields and persist the changes.
+
+    Args:
+        db: Active SQLAlchemy database session.
+        product_id: Integer primary key of the product to update.
+        name: New name value.
+        sku: New SKU value.
+
+    Returns:
+        The updated Product instance, or None if no Product with that ID exists.
+    """
+    product = db.get(Product, product_id)
+    if product is None:
+        return None
+    product.name = name
+    product.sku = sku
+    db.commit()
+    db.refresh(product)
+    return product
