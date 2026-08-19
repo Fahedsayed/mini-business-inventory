@@ -12,7 +12,7 @@ sys.path.append(str(Path(__file__).resolve().parent))
 from database import Base, SessionLocal, engine, get_db
 from main import app
 from models import Product
-from repository import create_product, get_product_by_id, list_products, update_product
+from repository import create_product, delete_product, get_product_by_id, list_products, update_product
 from schemas import HealthResponse, ProductCreate, ProductResponse, ProductUpdate
 
 
@@ -417,4 +417,82 @@ class UpdateProductEndpointTestCase(unittest.TestCase):
 
     def test_update_product_empty_payload(self):
         response = self.client.put("/products/1", json={})
+        self.assertEqual(response.status_code, 422)
+
+
+class DeleteProductEndpointTestCase(unittest.TestCase):
+    def setUp(self):
+        self.engine = create_engine(
+            "sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(bind=self.engine)
+        self.TestingSessionLocal = sessionmaker(
+            autocommit=False, autoflush=False, bind=self.engine
+        )
+
+        def override_get_db():
+            db = self.TestingSessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        app.dependency_overrides[get_db] = override_get_db
+        self.client = TestClient(app)
+
+    def tearDown(self):
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=self.engine)
+        self.engine.dispose()
+
+    def test_delete_product_success(self):
+        db = self.TestingSessionLocal()
+        try:
+            product = create_product(db, Product(name="To Delete", sku="DEL-001"))
+            product_id = product.id
+        finally:
+            db.close()
+
+        response = self.client.delete(f"/products/{product_id}")
+        self.assertEqual(response.status_code, 204)
+
+    def test_delete_product_no_longer_retrievable(self):
+        db = self.TestingSessionLocal()
+        try:
+            product = create_product(db, Product(name="Gone Soon", sku="GONE-001"))
+            product_id = product.id
+        finally:
+            db.close()
+
+        self.client.delete(f"/products/{product_id}")
+
+        response = self.client.get(f"/products/{product_id}")
+        self.assertEqual(response.status_code, 404)
+
+    def test_delete_product_removed_from_db(self):
+        db = self.TestingSessionLocal()
+        try:
+            product = create_product(db, Product(name="DB Check", sku="DBC-001"))
+            product_id = product.id
+        finally:
+            db.close()
+
+        self.client.delete(f"/products/{product_id}")
+
+        db = self.TestingSessionLocal()
+        try:
+            fetched = get_product_by_id(db, product_id)
+            self.assertIsNone(fetched)
+        finally:
+            db.close()
+
+    def test_delete_product_not_found(self):
+        response = self.client.delete("/products/99999")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json(), {"detail": "Product not found"})
+
+    def test_delete_product_invalid_id_type(self):
+        response = self.client.delete("/products/abc")
         self.assertEqual(response.status_code, 422)

@@ -68,3 +68,21 @@ def update_product(db: Session, product_id: int, name: str, sku: str) -> Optiona
     db.commit()
     db.refresh(product)
     return product
+
+
+def delete_product(db: Session, product_id: int) -> bool:
+    """Delete an existing Product from the database.
+
+    Args:
+        db: Active SQLAlchemy database session.
+        product_id: Integer primary key of the product to delete.
+
+    Returns:
+        True if the Product was found and deleted, False if it did not exist.
+    """
+    product = db.get(Product, product_id)
+    if product is None:
+        return False
+    db.delete(product)
+    db.commit()
+    return True

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from config import settings
 from database import get_db
 from models import Product
-from repository import create_product, get_product_by_id, list_products, update_product
+from repository import create_product, delete_product, get_product_by_id, list_products, update_product
 from schemas import HealthResponse, ProductCreate, ProductResponse, ProductUpdate
 
 app = FastAPI(title=settings.app_name)
@@ -76,3 +76,20 @@ def update_existing_product(
             detail="Product not found",
         )
     return product
+
+
+@app.delete(
+    "/products/{product_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_existing_product(
+    product_id: int,
+    db: Session = Depends(get_db),
+):
+    """Delete a product by its ID."""
+    deleted = delete_product(db, product_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product not found",
+        )
