@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from config import settings
 from database import get_db
 from models import Product
-from repository import create_product, get_product_by_id
+from repository import create_product, get_product_by_id, list_products
 from schemas import HealthResponse, ProductCreate, ProductResponse
 
 app = FastAPI(title=settings.app_name)
@@ -28,6 +28,17 @@ def create_new_product(
     """Create a new product."""
     product = Product(name=product_in.name, sku=product_in.sku)
     return create_product(db, product)
+
+
+@app.get(
+    "/products",
+    response_model=list[ProductResponse],
+)
+def list_all_products(
+    db: Session = Depends(get_db),
+):
+    """Retrieve all products."""
+    return list_products(db)
 
 
 @app.get(

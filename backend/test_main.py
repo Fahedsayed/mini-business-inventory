@@ -12,7 +12,7 @@ sys.path.append(str(Path(__file__).resolve().parent))
 from database import Base, SessionLocal, engine, get_db
 from main import app
 from models import Product
-from repository import create_product, get_product_by_id
+from repository import create_product, get_product_by_id, list_products
 from schemas import HealthResponse, ProductCreate, ProductResponse
 
 
@@ -125,6 +125,25 @@ class ProductRepositoryTestCase(unittest.TestCase):
         self.assertIsNotNone(fetched2)
         self.assertEqual(fetched1.name, "Item One")
         self.assertEqual(fetched2.name, "Item Two")
+
+    def test_list_products_empty(self):
+        products = list_products(self.db)
+        self.assertEqual(products, [])
+
+    def test_list_products_populated(self):
+        product1 = Product(name="Alpha", sku="SKU-A")
+        product2 = Product(name="Beta", sku="SKU-B")
+        product3 = Product(name="Gamma", sku="SKU-C")
+        create_product(self.db, product1)
+        create_product(self.db, product2)
+        create_product(self.db, product3)
+
+        products = list_products(self.db)
+        self.assertEqual(len(products), 3)
+        self.assertEqual([p.id for p in products], sorted([p.id for p in products]))
+        self.assertEqual(products[0].sku, "SKU-A")
+        self.assertEqual(products[1].sku, "SKU-B")
+        self.assertEqual(products[2].sku, "SKU-C")
 
 
 class CreateProductEndpointTestCase(unittest.TestCase):
@@ -250,3 +269,70 @@ class RetrieveProductEndpointTestCase(unittest.TestCase):
     def test_get_product_invalid_id_type(self):
         response = self.client.get("/products/abc")
         self.assertEqual(response.status_code, 422)
+
+
+class ListProductsEndpointTestCase(unittest.TestCase):
+    def setUp(self):
+        self.engine = create_engine(
+            "sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(bind=self.engine)
+        self.TestingSessionLocal = sessionmaker(
+            autocommit=False, autoflush=False, bind=self.engine
+        )
+
+        def override_get_db():
+            db = self.TestingSessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        app.dependency_overrides[get_db] = override_get_db
+        self.client = TestClient(app)
+
+    def tearDown(self):
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=self.engine)
+        self.engine.dispose()
+
+    def test_list_products_empty(self):
+        response = self.client.get("/products")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
+
+    def test_list_products_populated(self):
+        db = self.TestingSessionLocal()
+        try:
+            p1 = create_product(db, Product(name="Widget Alpha", sku="WID-001"))
+            p2 = create_product(db, Product(name="Widget Beta", sku="WID-002"))
+            p3 = create_product(db, Product(name="Widget Gamma", sku="WID-003"))
+            p1_id, p2_id, p3_id = p1.id, p2.id, p3.id
+        finally:
+            db.close()
+
+        response = self.client.get("/products")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIsInstance(data, list)
+        self.assertEqual(len(data), 3)
+
+        # Verify deterministic ordering by ID ascending
+        ids = [item["id"] for item in data]
+        self.assertEqual(ids, [p1_id, p2_id, p3_id])
+
+
+        # Verify fields match
+        self.assertEqual(data[0]["name"], "Widget Alpha")
+        self.assertEqual(data[0]["sku"], "WID-001")
+        self.assertIn("created_at", data[0])
+
+        self.assertEqual(data[1]["name"], "Widget Beta")
+        self.assertEqual(data[1]["sku"], "WID-002")
+        self.assertIn("created_at", data[1])
+
+        self.assertEqual(data[2]["name"], "Widget Gamma")
+        self.assertEqual(data[2]["sku"], "WID-003")
+        self.assertIn("created_at", data[2])
