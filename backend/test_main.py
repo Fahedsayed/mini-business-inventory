@@ -125,7 +125,7 @@ class ProductRepositoryTestCase(unittest.TestCase):
         self.assertEqual(fetched2.name, "Item Two")
 
     def test_list_products_empty(self):
-        products = list_products(self.db)
+        products = list_products(self.db, limit=20, offset=0)
         self.assertEqual(products, [])
 
     def test_list_products_populated(self):
@@ -133,12 +133,28 @@ class ProductRepositoryTestCase(unittest.TestCase):
         create_product(self.db, name="Beta", sku="SKU-B")
         create_product(self.db, name="Gamma", sku="SKU-C")
 
-        products = list_products(self.db)
+        products = list_products(self.db, limit=20, offset=0)
         self.assertEqual(len(products), 3)
         self.assertEqual([p.id for p in products], sorted([p.id for p in products]))
         self.assertEqual(products[0].sku, "SKU-A")
         self.assertEqual(products[1].sku, "SKU-B")
         self.assertEqual(products[2].sku, "SKU-C")
+
+    def test_list_products_applies_limit_and_offset(self):
+        create_product(self.db, name="Alpha", sku="SKU-A")
+        create_product(self.db, name="Beta", sku="SKU-B")
+        create_product(self.db, name="Gamma", sku="SKU-C")
+
+        products = list_products(self.db, limit=2, offset=1)
+
+        self.assertEqual([product.sku for product in products], ["SKU-B", "SKU-C"])
+
+    def test_list_products_returns_empty_page_beyond_available_records(self):
+        create_product(self.db, name="Alpha", sku="SKU-A")
+
+        products = list_products(self.db, limit=20, offset=1)
+
+        self.assertEqual(products, [])
 
 
 class CreateProductEndpointTestCase(unittest.TestCase):
@@ -399,6 +415,71 @@ class ListProductsEndpointTestCase(unittest.TestCase):
         self.assertEqual(data[2]["name"], "Widget Gamma")
         self.assertEqual(data[2]["sku"], "WID-003")
         self.assertIn("created_at", data[2])
+
+    def test_list_products_uses_default_pagination(self):
+        db = self.TestingSessionLocal()
+        try:
+            for index in range(21):
+                create_product(db, name=f"Product {index}", sku=f"PAGE-{index:03d}")
+        finally:
+            db.close()
+
+        response = self.client.get("/products")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()), 20)
+
+    def test_list_products_accepts_custom_limit(self):
+        db = self.TestingSessionLocal()
+        try:
+            create_product(db, name="Alpha", sku="SKU-A")
+            create_product(db, name="Beta", sku="SKU-B")
+            create_product(db, name="Gamma", sku="SKU-C")
+        finally:
+            db.close()
+
+        response = self.client.get("/products?limit=2")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([product["sku"] for product in response.json()], ["SKU-A", "SKU-B"])
+
+    def test_list_products_accepts_custom_offset(self):
+        db = self.TestingSessionLocal()
+        try:
+            create_product(db, name="Alpha", sku="SKU-A")
+            create_product(db, name="Beta", sku="SKU-B")
+            create_product(db, name="Gamma", sku="SKU-C")
+        finally:
+            db.close()
+
+        response = self.client.get("/products?limit=2&offset=1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([product["sku"] for product in response.json()], ["SKU-B", "SKU-C"])
+
+    def test_list_products_accepts_maximum_limit(self):
+        response = self.client.get("/products?limit=100")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
+
+    def test_list_products_rejects_invalid_pagination_values(self):
+        for query in ("limit=0", "limit=101", "limit=invalid", "offset=-1", "offset=invalid"):
+            with self.subTest(query=query):
+                response = self.client.get(f"/products?{query}")
+                self.assertEqual(response.status_code, 422)
+
+    def test_list_products_returns_empty_result_beyond_available_offset(self):
+        db = self.TestingSessionLocal()
+        try:
+            create_product(db, name="Alpha", sku="SKU-A")
+        finally:
+            db.close()
+
+        response = self.client.get("/products?offset=1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
 
     @patch("main.list_products", side_effect=SQLAlchemyError("Internal database explosion"))
     def test_list_products_database_error_does_not_leak_internals(self, mock_list):

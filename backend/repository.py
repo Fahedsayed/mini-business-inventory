@@ -37,16 +37,18 @@ def get_product_by_id(db: Session, product_id: int) -> Optional[Product]:
     return db.get(Product, product_id)
 
 
-def list_products(db: Session) -> list[Product]:
-    """Retrieve all Products ordered deterministically by ID ascending.
+def list_products(db: Session, limit: int, offset: int) -> list[Product]:
+    """Retrieve a page of Products ordered deterministically by ID ascending.
 
     Args:
         db: Active SQLAlchemy database session.
+        limit: Maximum number of Products to return.
+        offset: Number of Products to skip.
 
     Returns:
         List of Product instances.
     """
-    stmt = select(Product).order_by(Product.id.asc())
+    stmt = select(Product).order_by(Product.id.asc()).limit(limit).offset(offset)
     return list(db.scalars(stmt).all())
 
 
