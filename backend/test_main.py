@@ -201,6 +201,44 @@ class CreateProductEndpointTestCase(unittest.TestCase):
         response = self.client.post("/products", json={})
         self.assertEqual(response.status_code, 422)
 
+    def test_create_product_empty_name(self):
+        payload = {"name": "", "sku": "VALID-SKU"}
+        response = self.client.post("/products", json=payload)
+        self.assertEqual(response.status_code, 422)
+
+    def test_create_product_whitespace_name(self):
+        payload = {"name": "   ", "sku": "VALID-SKU"}
+        response = self.client.post("/products", json=payload)
+        self.assertEqual(response.status_code, 422)
+
+    def test_create_product_empty_sku(self):
+        payload = {"name": "Valid Name", "sku": ""}
+        response = self.client.post("/products", json=payload)
+        self.assertEqual(response.status_code, 422)
+
+    def test_create_product_whitespace_sku(self):
+        payload = {"name": "Valid Name", "sku": "   "}
+        response = self.client.post("/products", json=payload)
+        self.assertEqual(response.status_code, 422)
+
+    def test_create_product_name_too_long(self):
+        payload = {"name": "A" * 256, "sku": "VALID-SKU"}
+        response = self.client.post("/products", json=payload)
+        self.assertEqual(response.status_code, 422)
+
+    def test_create_product_sku_too_long(self):
+        payload = {"name": "Valid Name", "sku": "A" * 101}
+        response = self.client.post("/products", json=payload)
+        self.assertEqual(response.status_code, 422)
+
+    def test_create_product_trims_whitespace(self):
+        payload = {"name": "  Trimmed Name  ", "sku": "  TRIM-001  "}
+        response = self.client.post("/products", json=payload)
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertEqual(data["name"], "Trimmed Name")
+        self.assertEqual(data["sku"], "TRIM-001")
+
     def test_create_product_persisted_in_database(self):
         payload = {"name": "Database Persisted", "sku": "DB-001"}
         response = self.client.post("/products", json=payload)
@@ -418,6 +456,51 @@ class UpdateProductEndpointTestCase(unittest.TestCase):
     def test_update_product_empty_payload(self):
         response = self.client.put("/products/1", json={})
         self.assertEqual(response.status_code, 422)
+
+    def test_update_product_empty_name(self):
+        payload = {"name": "", "sku": "VALID-SKU"}
+        response = self.client.put("/products/1", json=payload)
+        self.assertEqual(response.status_code, 422)
+
+    def test_update_product_whitespace_name(self):
+        payload = {"name": "   ", "sku": "VALID-SKU"}
+        response = self.client.put("/products/1", json=payload)
+        self.assertEqual(response.status_code, 422)
+
+    def test_update_product_empty_sku(self):
+        payload = {"name": "Valid Name", "sku": ""}
+        response = self.client.put("/products/1", json=payload)
+        self.assertEqual(response.status_code, 422)
+
+    def test_update_product_whitespace_sku(self):
+        payload = {"name": "Valid Name", "sku": "   "}
+        response = self.client.put("/products/1", json=payload)
+        self.assertEqual(response.status_code, 422)
+
+    def test_update_product_name_too_long(self):
+        payload = {"name": "A" * 256, "sku": "VALID-SKU"}
+        response = self.client.put("/products/1", json=payload)
+        self.assertEqual(response.status_code, 422)
+
+    def test_update_product_sku_too_long(self):
+        payload = {"name": "Valid Name", "sku": "A" * 101}
+        response = self.client.put("/products/1", json=payload)
+        self.assertEqual(response.status_code, 422)
+
+    def test_update_product_trims_whitespace(self):
+        db = self.TestingSessionLocal()
+        try:
+            product = create_product(db, Product(name="Original", sku="ORIG-TRIM"))
+            product_id = product.id
+        finally:
+            db.close()
+
+        payload = {"name": "  Updated Trimmed  ", "sku": "  UPD-TRIM  "}
+        response = self.client.put(f"/products/{product_id}", json=payload)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["name"], "Updated Trimmed")
+        self.assertEqual(data["sku"], "UPD-TRIM")
 
 
 class DeleteProductEndpointTestCase(unittest.TestCase):
