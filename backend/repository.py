@@ -6,16 +6,18 @@ from sqlalchemy.orm import Session
 from models import Product
 
 
-def create_product(db: Session, product: Product) -> Product:
+def create_product(db: Session, name: str, sku: str) -> Product:
     """Create and persist a new Product in the database.
 
     Args:
         db: Active SQLAlchemy database session.
-        product: Product model instance to persist.
+        name: Name of the product.
+        sku: Unique SKU identifier for the product.
 
     Returns:
         The persisted Product instance with refreshed attributes.
     """
+    product = Product(name=name, sku=sku)
     db.add(product)
     db.commit()
     db.refresh(product)

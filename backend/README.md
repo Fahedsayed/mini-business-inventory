@@ -77,10 +77,32 @@ From the `backend/` directory:
   alembic revision --autogenerate -m "describe change"
   ```
 
+### Architecture & Layer Responsibilities
+
+The backend follows a layered architecture with clean separation of concerns:
+
+```text
+HTTP / API (main.py)
+       ↓
+Repository (repository.py)
+       ↓
+SQLAlchemy Session (database.py)
+       ↓
+Database (SQLite)
+```
+
+- **API Routes (`main.py`)**: Thin FastAPI endpoints handling HTTP routing, dependency injection (`get_db`), request validation via Pydantic schemas, HTTP exception mapping, and response serialization.
+- **Repository (`repository.py`)**: Data access layer encapsulating all SQLAlchemy queries, model entity instantiation, and database transactions.
+- **Schemas (`schemas.py`)**: Pydantic v2 models for API input validation and output serialization (`ProductCreate`, `ProductUpdate`, `ProductResponse`).
+- **Models (`models.py`)**: SQLAlchemy declarative ORM models representing database tables and constraints (`Product`).
+- **Database (`database.py`)**: Database engine configuration, session management, and `get_db` generator dependency.
+
 ### Data access
 
 The backend isolates database operations using repository functions in `backend/repository.py`:
 
-- `create_product(db, product)`: Persists and refreshes a `Product` entity.
+- `create_product(db, name, sku)`: Instantiates, persists, and refreshes a `Product` entity.
 - `get_product_by_id(db, product_id)`: Retrieves a `Product` by its primary key ID.
-- `list_products(db)`: Retrieves all `Product` entities ordered deterministically by ID.
+- `list_products(db)`: Retrieves all `Product` entities ordered deterministically by ID ascending.
+- `update_product(db, product_id, name, sku)`: Updates and persists changes to an existing `Product`.
+- `delete_product(db, product_id)`: Deletes a `Product` entity from the database.
