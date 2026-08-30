@@ -90,8 +90,7 @@ class ProductRepositoryTestCase(unittest.TestCase):
         self.engine.dispose()
 
     def test_create_product(self):
-        product = Product(name="Test Widget", sku="WIDGET-001")
-        created = create_product(self.db, product)
+        created = create_product(self.db, name="Test Widget", sku="WIDGET-001")
 
         self.assertIsNotNone(created.id)
         self.assertEqual(created.name, "Test Widget")
@@ -99,8 +98,7 @@ class ProductRepositoryTestCase(unittest.TestCase):
         self.assertIsNotNone(created.created_at)
 
     def test_get_product_by_id(self):
-        product = Product(name="Gadget", sku="GADGET-001")
-        created = create_product(self.db, product)
+        created = create_product(self.db, name="Gadget", sku="GADGET-001")
 
         fetched = get_product_by_id(self.db, created.id)
         self.assertIsNotNone(fetched)
@@ -113,10 +111,8 @@ class ProductRepositoryTestCase(unittest.TestCase):
         self.assertIsNone(fetched)
 
     def test_create_and_retrieve_multiple_products(self):
-        product1 = Product(name="Item One", sku="SKU-001")
-        product2 = Product(name="Item Two", sku="SKU-002")
-        created1 = create_product(self.db, product1)
-        created2 = create_product(self.db, product2)
+        created1 = create_product(self.db, name="Item One", sku="SKU-001")
+        created2 = create_product(self.db, name="Item Two", sku="SKU-002")
 
         self.assertNotEqual(created1.id, created2.id)
 
@@ -133,12 +129,9 @@ class ProductRepositoryTestCase(unittest.TestCase):
         self.assertEqual(products, [])
 
     def test_list_products_populated(self):
-        product1 = Product(name="Alpha", sku="SKU-A")
-        product2 = Product(name="Beta", sku="SKU-B")
-        product3 = Product(name="Gamma", sku="SKU-C")
-        create_product(self.db, product1)
-        create_product(self.db, product2)
-        create_product(self.db, product3)
+        create_product(self.db, name="Alpha", sku="SKU-A")
+        create_product(self.db, name="Beta", sku="SKU-B")
+        create_product(self.db, name="Gamma", sku="SKU-C")
 
         products = list_products(self.db)
         self.assertEqual(len(products), 3)
@@ -308,8 +301,7 @@ class RetrieveProductEndpointTestCase(unittest.TestCase):
     def test_get_product_success(self):
         db = self.TestingSessionLocal()
         try:
-            product = Product(name="Inventory Item", sku="ITEM-100")
-            created = create_product(db, product)
+            created = create_product(db, name="Inventory Item", sku="ITEM-100")
             product_id = created.id
         finally:
             db.close()
@@ -377,9 +369,9 @@ class ListProductsEndpointTestCase(unittest.TestCase):
     def test_list_products_populated(self):
         db = self.TestingSessionLocal()
         try:
-            p1 = create_product(db, Product(name="Widget Alpha", sku="WID-001"))
-            p2 = create_product(db, Product(name="Widget Beta", sku="WID-002"))
-            p3 = create_product(db, Product(name="Widget Gamma", sku="WID-003"))
+            p1 = create_product(db, name="Widget Alpha", sku="WID-001")
+            p2 = create_product(db, name="Widget Beta", sku="WID-002")
+            p3 = create_product(db, name="Widget Gamma", sku="WID-003")
             p1_id, p2_id, p3_id = p1.id, p2.id, p3.id
         finally:
             db.close()
@@ -449,7 +441,7 @@ class UpdateProductEndpointTestCase(unittest.TestCase):
     def test_update_product_success(self):
         db = self.TestingSessionLocal()
         try:
-            product = create_product(db, Product(name="Original Name", sku="ORIG-001"))
+            product = create_product(db, name="Original Name", sku="ORIG-001")
             product_id = product.id
         finally:
             db.close()
@@ -466,7 +458,7 @@ class UpdateProductEndpointTestCase(unittest.TestCase):
     def test_update_product_persisted(self):
         db = self.TestingSessionLocal()
         try:
-            product = create_product(db, Product(name="Before Update", sku="BEF-001"))
+            product = create_product(db, name="Before Update", sku="BEF-001")
             product_id = product.id
         finally:
             db.close()
@@ -533,7 +525,7 @@ class UpdateProductEndpointTestCase(unittest.TestCase):
     def test_update_product_trims_whitespace(self):
         db = self.TestingSessionLocal()
         try:
-            product = create_product(db, Product(name="Original", sku="ORIG-TRIM"))
+            product = create_product(db, name="Original", sku="ORIG-TRIM")
             product_id = product.id
         finally:
             db.close()
@@ -548,8 +540,8 @@ class UpdateProductEndpointTestCase(unittest.TestCase):
     def test_update_product_duplicate_sku_conflict(self):
         db = self.TestingSessionLocal()
         try:
-            create_product(db, Product(name="Item 1", sku="SKU-EXISTING-1"))
-            p2 = create_product(db, Product(name="Item 2", sku="SKU-EXISTING-2"))
+            create_product(db, name="Item 1", sku="SKU-EXISTING-1")
+            p2 = create_product(db, name="Item 2", sku="SKU-EXISTING-2")
             p2_id = p2.id
         finally:
             db.close()
@@ -605,7 +597,7 @@ class DeleteProductEndpointTestCase(unittest.TestCase):
     def test_delete_product_success(self):
         db = self.TestingSessionLocal()
         try:
-            product = create_product(db, Product(name="To Delete", sku="DEL-001"))
+            product = create_product(db, name="To Delete", sku="DEL-001")
             product_id = product.id
         finally:
             db.close()
@@ -616,7 +608,7 @@ class DeleteProductEndpointTestCase(unittest.TestCase):
     def test_delete_product_no_longer_retrievable(self):
         db = self.TestingSessionLocal()
         try:
-            product = create_product(db, Product(name="Gone Soon", sku="GONE-001"))
+            product = create_product(db, name="Gone Soon", sku="GONE-001")
             product_id = product.id
         finally:
             db.close()
@@ -629,7 +621,7 @@ class DeleteProductEndpointTestCase(unittest.TestCase):
     def test_delete_product_removed_from_db(self):
         db = self.TestingSessionLocal()
         try:
-            product = create_product(db, Product(name="DB Check", sku="DBC-001"))
+            product = create_product(db, name="DB Check", sku="DBC-001")
             product_id = product.id
         finally:
             db.close()

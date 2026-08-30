@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from database import get_db
-from models import Product
 from repository import create_product, delete_product, get_product_by_id, list_products, update_product
 from schemas import HealthResponse, ProductCreate, ProductResponse, ProductUpdate
 
@@ -27,9 +26,8 @@ def create_new_product(
     db: Session = Depends(get_db),
 ):
     """Create a new product."""
-    product = Product(name=product_in.name, sku=product_in.sku)
     try:
-        return create_product(db, product)
+        return create_product(db, name=product_in.name, sku=product_in.sku)
     except IntegrityError:
         db.rollback()
         raise HTTPException(
