@@ -1,4 +1,5 @@
 from fastapi import Depends, FastAPI, HTTPException, status
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from config import settings
@@ -27,7 +28,20 @@ def create_new_product(
 ):
     """Create a new product."""
     product = Product(name=product_in.name, sku=product_in.sku)
-    return create_product(db, product)
+    try:
+        return create_product(db, product)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Product with this SKU already exists",
+        )
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while processing the database request",
+        )
 
 
 @app.get(
@@ -38,7 +52,13 @@ def list_all_products(
     db: Session = Depends(get_db),
 ):
     """Retrieve all products."""
-    return list_products(db)
+    try:
+        return list_products(db)
+    except SQLAlchemyError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while processing the database request",
+        )
 
 
 @app.get(
@@ -50,7 +70,14 @@ def get_product(
     db: Session = Depends(get_db),
 ):
     """Retrieve a product by its ID."""
-    product = get_product_by_id(db, product_id)
+    try:
+        product = get_product_by_id(db, product_id)
+    except SQLAlchemyError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while processing the database request",
+        )
+
     if product is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -69,7 +96,21 @@ def update_existing_product(
     db: Session = Depends(get_db),
 ):
     """Update an existing product by its ID."""
-    product = update_product(db, product_id, name=product_in.name, sku=product_in.sku)
+    try:
+        product = update_product(db, product_id, name=product_in.name, sku=product_in.sku)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Product with this SKU already exists",
+        )
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while processing the database request",
+        )
+
     if product is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -87,7 +128,15 @@ def delete_existing_product(
     db: Session = Depends(get_db),
 ):
     """Delete a product by its ID."""
-    deleted = delete_product(db, product_id)
+    try:
+        deleted = delete_product(db, product_id)
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while processing the database request",
+        )
+
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
