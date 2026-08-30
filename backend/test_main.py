@@ -559,6 +559,10 @@ class UpdateProductEndpointTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json(), {"detail": "Product with this SKU already exists"})
 
+    def test_update_product_invalid_id_type(self):
+        response = self.client.put("/products/abc", json={"name": "Name", "sku": "SKU-001"})
+        self.assertEqual(response.status_code, 422)
+
     @patch("main.update_product", side_effect=SQLAlchemyError("Internal database explosion"))
     def test_update_product_database_error_does_not_leak_internals(self, mock_update):
         payload = {"name": "Valid Name", "sku": "SKU-VALID"}
@@ -657,3 +661,124 @@ class DeleteProductEndpointTestCase(unittest.TestCase):
             {"detail": "An error occurred while processing the database request"},
         )
         self.assertNotIn("Internal database explosion", response.text)
+
+
+class ProductCRUDLifecycleTestCase(unittest.TestCase):
+    def setUp(self):
+        self.engine = create_engine(
+            "sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(bind=self.engine)
+        self.TestingSessionLocal = sessionmaker(
+            autocommit=False, autoflush=False, bind=self.engine
+        )
+
+        def override_get_db():
+            db = self.TestingSessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        app.dependency_overrides[get_db] = override_get_db
+        self.client = TestClient(app)
+
+    def tearDown(self):
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=self.engine)
+        self.engine.dispose()
+
+    def test_full_product_crud_lifecycle(self):
+        # 1. CREATE (POST /products)
+        create_payload = {"name": "Lifecycle Laptop", "sku": "LIFE-LAPTOP-01"}
+        create_res = self.client.post("/products", json=create_payload)
+        self.assertEqual(create_res.status_code, 201)
+        created_data = create_res.json()
+        product_id = created_data["id"]
+        self.assertEqual(created_data["name"], "Lifecycle Laptop")
+        self.assertEqual(created_data["sku"], "LIFE-LAPTOP-01")
+        self.assertIn("created_at", created_data)
+
+        # 2. RETRIEVE SINGLE (GET /products/{id})
+        get_res = self.client.get(f"/products/{product_id}")
+        self.assertEqual(get_res.status_code, 200)
+        get_data = get_res.json()
+        self.assertEqual(get_data["id"], product_id)
+        self.assertEqual(get_data["name"], "Lifecycle Laptop")
+        self.assertEqual(get_data["sku"], "LIFE-LAPTOP-01")
+
+        # 3. LIST ALL (GET /products)
+        list_res = self.client.get("/products")
+        self.assertEqual(list_res.status_code, 200)
+        list_data = list_res.json()
+        self.assertEqual(len(list_data), 1)
+        self.assertEqual(list_data[0]["id"], product_id)
+
+        # 4. UPDATE (PUT /products/{id})
+        update_payload = {"name": "Updated Lifecycle Laptop", "sku": "LIFE-LAPTOP-02"}
+        update_res = self.client.put(f"/products/{product_id}", json=update_payload)
+        self.assertEqual(update_res.status_code, 200)
+        updated_data = update_res.json()
+        self.assertEqual(updated_data["id"], product_id)
+        self.assertEqual(updated_data["name"], "Updated Lifecycle Laptop")
+        self.assertEqual(updated_data["sku"], "LIFE-LAPTOP-02")
+
+        # 5. RETRIEVE UPDATED (GET /products/{id})
+        get_updated_res = self.client.get(f"/products/{product_id}")
+        self.assertEqual(get_updated_res.status_code, 200)
+        self.assertEqual(get_updated_res.json()["name"], "Updated Lifecycle Laptop")
+        self.assertEqual(get_updated_res.json()["sku"], "LIFE-LAPTOP-02")
+
+        # 6. DELETE (DELETE /products/{id})
+        delete_res = self.client.delete(f"/products/{product_id}")
+        self.assertEqual(delete_res.status_code, 204)
+
+        # 7. CONFIRM 404 ON RETRIEVE (GET /products/{id})
+        get_deleted_res = self.client.get(f"/products/{product_id}")
+        self.assertEqual(get_deleted_res.status_code, 404)
+        self.assertEqual(get_deleted_res.json(), {"detail": "Product not found"})
+
+        # 8. CONFIRM EMPTY LIST (GET /products)
+        final_list_res = self.client.get("/products")
+        self.assertEqual(final_list_res.status_code, 200)
+        self.assertEqual(final_list_res.json(), [])
+
+    def test_crud_isolation_across_multiple_entities(self):
+        # Create 3 products
+        p1 = self.client.post("/products", json={"name": "Item 1", "sku": "ISO-001"}).json()
+        p2 = self.client.post("/products", json={"name": "Item 2", "sku": "ISO-002"}).json()
+        p3 = self.client.post("/products", json={"name": "Item 3", "sku": "ISO-003"}).json()
+
+        # Verify listing contains all 3
+        list_all = self.client.get("/products").json()
+        self.assertEqual(len(list_all), 3)
+
+        # Update P2
+        upd_p2 = self.client.put(
+            f"/products/{p2['id']}",
+            json={"name": "Item 2 Modified", "sku": "ISO-002-MOD"},
+        )
+        self.assertEqual(upd_p2.status_code, 200)
+
+        # Verify P1 and P3 are unaffected
+        self.assertEqual(self.client.get(f"/products/{p1['id']}").json()["name"], "Item 1")
+        self.assertEqual(self.client.get(f"/products/{p3['id']}").json()["name"], "Item 3")
+
+        # Delete P2
+        self.assertEqual(self.client.delete(f"/products/{p2['id']}").status_code, 204)
+
+        # Verify list now has exactly 2 items: P1 and P3
+        remaining = self.client.get("/products").json()
+        self.assertEqual(len(remaining), 2)
+        remaining_ids = [item["id"] for item in remaining]
+        self.assertEqual(remaining_ids, [p1["id"], p3["id"]])
+
+        # Verify P2 is 404 on GET, PUT, and DELETE
+        self.assertEqual(self.client.get(f"/products/{p2['id']}").status_code, 404)
+        self.assertEqual(
+            self.client.put(f"/products/{p2['id']}", json={"name": "X", "sku": "Y"}).status_code,
+            404,
+        )
+        self.assertEqual(self.client.delete(f"/products/{p2['id']}").status_code, 404)
