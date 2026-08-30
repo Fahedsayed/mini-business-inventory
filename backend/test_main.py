@@ -1,10 +1,12 @@
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 import sys
 
 from fastapi.testclient import TestClient
 from sqlalchemy import DateTime, Integer, String, create_engine
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -254,6 +256,27 @@ class CreateProductEndpointTestCase(unittest.TestCase):
         finally:
             db.close()
 
+    def test_create_product_duplicate_sku_conflict(self):
+        payload = {"name": "First Product", "sku": "SKU-DUP"}
+        response1 = self.client.post("/products", json=payload)
+        self.assertEqual(response1.status_code, 201)
+
+        payload_dup = {"name": "Duplicate Product", "sku": "SKU-DUP"}
+        response2 = self.client.post("/products", json=payload_dup)
+        self.assertEqual(response2.status_code, 409)
+        self.assertEqual(response2.json(), {"detail": "Product with this SKU already exists"})
+
+    @patch("main.create_product", side_effect=SQLAlchemyError("Internal database explosion"))
+    def test_create_product_database_error_does_not_leak_internals(self, mock_create):
+        payload = {"name": "Valid Product", "sku": "SKU-VALID"}
+        response = self.client.post("/products", json=payload)
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            response.json(),
+            {"detail": "An error occurred while processing the database request"},
+        )
+        self.assertNotIn("Internal database explosion", response.text)
+
 
 class RetrieveProductEndpointTestCase(unittest.TestCase):
     def setUp(self):
@@ -307,6 +330,16 @@ class RetrieveProductEndpointTestCase(unittest.TestCase):
     def test_get_product_invalid_id_type(self):
         response = self.client.get("/products/abc")
         self.assertEqual(response.status_code, 422)
+
+    @patch("main.get_product_by_id", side_effect=SQLAlchemyError("Internal database explosion"))
+    def test_get_product_database_error_does_not_leak_internals(self, mock_get):
+        response = self.client.get("/products/1")
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            response.json(),
+            {"detail": "An error occurred while processing the database request"},
+        )
+        self.assertNotIn("Internal database explosion", response.text)
 
 
 class ListProductsEndpointTestCase(unittest.TestCase):
@@ -374,6 +407,16 @@ class ListProductsEndpointTestCase(unittest.TestCase):
         self.assertEqual(data[2]["name"], "Widget Gamma")
         self.assertEqual(data[2]["sku"], "WID-003")
         self.assertIn("created_at", data[2])
+
+    @patch("main.list_products", side_effect=SQLAlchemyError("Internal database explosion"))
+    def test_list_products_database_error_does_not_leak_internals(self, mock_list):
+        response = self.client.get("/products")
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            response.json(),
+            {"detail": "An error occurred while processing the database request"},
+        )
+        self.assertNotIn("Internal database explosion", response.text)
 
 
 class UpdateProductEndpointTestCase(unittest.TestCase):
@@ -502,6 +545,31 @@ class UpdateProductEndpointTestCase(unittest.TestCase):
         self.assertEqual(data["name"], "Updated Trimmed")
         self.assertEqual(data["sku"], "UPD-TRIM")
 
+    def test_update_product_duplicate_sku_conflict(self):
+        db = self.TestingSessionLocal()
+        try:
+            create_product(db, Product(name="Item 1", sku="SKU-EXISTING-1"))
+            p2 = create_product(db, Product(name="Item 2", sku="SKU-EXISTING-2"))
+            p2_id = p2.id
+        finally:
+            db.close()
+
+        payload = {"name": "Updated Name", "sku": "SKU-EXISTING-1"}
+        response = self.client.put(f"/products/{p2_id}", json=payload)
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json(), {"detail": "Product with this SKU already exists"})
+
+    @patch("main.update_product", side_effect=SQLAlchemyError("Internal database explosion"))
+    def test_update_product_database_error_does_not_leak_internals(self, mock_update):
+        payload = {"name": "Valid Name", "sku": "SKU-VALID"}
+        response = self.client.put("/products/1", json=payload)
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            response.json(),
+            {"detail": "An error occurred while processing the database request"},
+        )
+        self.assertNotIn("Internal database explosion", response.text)
+
 
 class DeleteProductEndpointTestCase(unittest.TestCase):
     def setUp(self):
@@ -579,3 +647,13 @@ class DeleteProductEndpointTestCase(unittest.TestCase):
     def test_delete_product_invalid_id_type(self):
         response = self.client.delete("/products/abc")
         self.assertEqual(response.status_code, 422)
+
+    @patch("main.delete_product", side_effect=SQLAlchemyError("Internal database explosion"))
+    def test_delete_product_database_error_does_not_leak_internals(self, mock_delete):
+        response = self.client.delete("/products/1")
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            response.json(),
+            {"detail": "An error occurred while processing the database request"},
+        )
+        self.assertNotIn("Internal database explosion", response.text)
