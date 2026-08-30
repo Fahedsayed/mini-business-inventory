@@ -36,8 +36,10 @@ curl http://127.0.0.1:8000/products/1
 ### List products
 
 ```bash
-curl http://127.0.0.1:8000/products
+curl "http://127.0.0.1:8000/products?limit=20&offset=0"
 ```
+
+`limit` defaults to `20` and may be at most `100`. `offset` defaults to `0`.
 
 ## Configuration
 
@@ -103,6 +105,6 @@ The backend isolates database operations using repository functions in `backend/
 
 - `create_product(db, name, sku)`: Instantiates, persists, and refreshes a `Product` entity.
 - `get_product_by_id(db, product_id)`: Retrieves a `Product` by its primary key ID.
-- `list_products(db)`: Retrieves all `Product` entities ordered deterministically by ID ascending.
+- `list_products(db, limit, offset)`: Retrieves a page of `Product` entities ordered deterministically by ID ascending.
 - `update_product(db, product_id, name, sku)`: Updates and persists changes to an existing `Product`.
 - `delete_product(db, product_id)`: Deletes a `Product` entity from the database.
